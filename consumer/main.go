@@ -1,39 +1,23 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 func main() {
-	ctx := context.Background()
-	kafkaContainer := StartKafkaServer(ctx)
-
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
 	topic := os.Getenv("KAFKA_TOPIC")
-	// kafkaServers := os.Getenv("KAFKA_SERVER")
-
-	// defer func() {
-	// 	if err := tp.Shutdown(context.Background()); err != nil {
-	// 		log.Printf("Error shutting down tracer provider: %v", err)
-	// 	}
-	// }()
-
-	brokers, err := kafkaContainer.Brokers(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
+	brokers := os.Getenv("KAFKA_BROKERS")
 
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": brokers,
-		"group.id":          "myGroup",
+		"group.id":          "consumer-g1",
 		"auto.offset.reset": "earliest",
 	})
 
@@ -52,7 +36,7 @@ func main() {
 
 	// consume messages
 	run := true
-	for run == true {
+	for run {
 		select {
 		case sig := <-signals:
 			fmt.Printf("Caught signal %v: terminating\n", sig)
