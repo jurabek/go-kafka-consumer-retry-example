@@ -39,21 +39,23 @@ services:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=broker:29092
 
-  # consumer:
-  #   build:
-  #       context: .
-  #       dockerfile: consumer.Dockerfile
-  #   environment:
-  #       KAFKA_SERVER: broker:29092
-  #       KAFKA_TOPIC: test-topic
+  consumer:
+    container_name: consumer
+    build:
+        context: .
+        dockerfile: consumer.Dockerfile
+    environment:
+        KAFKA_BROKERS: broker:29092
+        KAFKA_TOPIC: test-topic
+        FAKE_BACKEND_URL: fake-backend:8999
 
-  # producer:
-  #   build:
-  #       context: .
-  #       dockerfile: producer.Dockerfile
-  #   environment:
-  #       KAFKA_SERVER: broker:29092
-  #       KAFKA_TOPIC: test-topic
+  producer:
+    build:
+        context: .
+        dockerfile: producer.Dockerfile
+    environment:
+        KAFKA_BROKERS: broker:29092
+        KAFKA_TOPIC: test-topic
 
   jaeger:
     image: jaegertracing/all-in-one:1.60
@@ -72,3 +74,12 @@ services:
       - "14269:14269"
       - "9411:9411"
     restart: always
+  
+  fake-backend:
+    container_name: fake-backend
+    image: fake-backend
+    build:
+      context: ./fake-backend
+      dockerfile: fake-backend.Dockerfile
+    ports:
+      - "8999:8999"

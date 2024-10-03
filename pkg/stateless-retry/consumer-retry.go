@@ -2,10 +2,21 @@ package statelessretry
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/cenkalti/backoff/v4"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
+
+type ErrKafkaRetrieble struct {
+	Err error
+}
+
+func (e *ErrKafkaRetrieble) Error() string {
+	return fmt.Sprintf("handling kafka message failed: %s", e.Err.Error())
+}
 
 type Handler interface {
 	Hanle(msg *kafka.Message) error
@@ -15,8 +26,9 @@ type Handler interface {
 type ConsumerWithRetryOption struct {
 	Handler       Handler
 	Consumer      *kafka.Consumer
-	RetryQueue    chan *kafka.Message
+	RetryQueue    chan *kafka.Message // make sure you passed buffered channel to get concurrent retries otherwies new messages will wait unitl previous retries are finished
 	MaxRetryCount int
+	Backoff       backoff.BackOff
 }
 
 func ConsumeWithRetry(ctx context.Context, option *ConsumerWithRetryOption) {
@@ -26,9 +38,18 @@ func ConsumeWithRetry(ctx context.Context, option *ConsumerWithRetryOption) {
 			case <-ctx.Done():
 				return
 			case retryMsg := <-option.RetryQueue:
-				for i := 0; i <= option.MaxRetryCount; i++ {
-					log.Printf("retrying msg: %v times: %v", retryMsg, i)
-				}
+				go func() {
+					retries := 1
+					for {
+						log.Printf("retrying msg: %v times: %v", string(retryMsg.Key), retries)
+						if retries >= option.MaxRetryCount {
+							option.Handler.MoveToDQL(retryMsg)
+							break
+						}
+						time.Sleep(option.Backoff.NextBackOff())
+						retries++
+					}
+				}()
 			}
 		}
 	}()
@@ -37,8 +58,8 @@ func ConsumeWithRetry(ctx context.Context, option *ConsumerWithRetryOption) {
 		e := option.Consumer.Poll(100)
 		switch m := e.(type) {
 		case *kafka.Message:
-			log.Printf("recieved message: %v", m)
 			if err := option.Handler.Hanle(m); err != nil {
+				log.Printf("handling message failed: %v err: %v\n", string(m.Key), err.Error())
 				option.RetryQueue <- m
 			}
 		}
